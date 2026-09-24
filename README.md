@@ -98,7 +98,7 @@ modal container list
 |---|---|
 | `已經用別的參數轉過` | 輸出資料夾是用另一組參數轉的。加 `--tag`，或 `--overwrite` 整個重轉 |
 | 「driver 已消失」 | driver 結束了但狀態沒收尾。取消後重送，已經轉好的會沿用 |
-| `Function avif-convert.run_job not found` | 還沒 `modal deploy convert.py` |
+| `Lookup failed for Function 'run_job' from the 'avif-convert' app` | 還沒 `modal deploy convert.py` |
 | 某些檔案失敗 | 網頁歷史紀錄或 `python avif.py status <job id>` 會列出每張的錯誤 |
 | 改了 `jobspec.py` 但網頁行為沒變 | server 啟動時就載入了，要重啟 `start-web.bat` |
 | Windows 主控台中文亂碼 | `chcp 65001`，或設定 `PYTHONIOENCODING=utf-8` |
