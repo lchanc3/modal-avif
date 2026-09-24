@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  容器內 ImageMagick 的安全政策，建 image 時覆蓋 /etc/ImageMagick-7/policy.xml。
+
+  白名單寫法：先全部關掉，再只開預期的格式。輸入是別人給的檔案，所以
+  MVG、MSL、URL、PS/EPS/PDF、SVG 這類「會執行東西或去抓東西」的 coder
+  一律不開（ImageTragick 那一類漏洞走的都是這些路）。
+
+  資源上限在這裡設得寬：policy 的值是天花板，執行時 -limit 只能往下調。
+  Debian 預設的 memory 1GiB / area 256MP 對大圖太小，會出現
+  cache resources exhausted。真正的每個 worker 上限由 convert.py 依容器
+  大小用 -limit 決定。
+-->
+<policymap>
+  <policy domain="delegate" rights="none" pattern="*" />
+  <policy domain="path" rights="none" pattern="@*" />
+
+  <policy domain="coder" rights="none" pattern="*" />
+  <policy domain="coder" rights="read" pattern="{JPEG,PNG,GIF,WEBP,TIFF,BMP,HEIC,HEIF}" />
+  <policy domain="coder" rights="read | write" pattern="AVIF" />
+
+  <policy domain="resource" name="memory" value="16GiB" />
+  <policy domain="resource" name="map" value="32GiB" />
+  <policy domain="resource" name="disk" value="32GiB" />
+  <policy domain="resource" name="area" value="1GP" />
+  <policy domain="resource" name="width" value="64KP" />
+  <policy domain="resource" name="height" value="64KP" />
+  <policy domain="resource" name="list-length" value="128" />
+</policymap>

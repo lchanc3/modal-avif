@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>modal-avif</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* 跟 modal-av1 同一套版面，強調色換成藍灰，兩個分頁並排時一眼分得出來 */
+  :root {
+    --bg: #F2F3F1;
+    --card: #FFFFFF;
+    --line: #DFE2DD;
+    --line-soft: #ECEEEA;
+    --field: #CFD4CD;
+    --fg: #181B1A;
+    --dim: #626A66;
+    --accent: #3D6680;
+    --accent-hi: #2C4E63;
+    --accent-soft: #EAF0F4;
+    --ok: #2F7D5B;
+    --err: #B03A2E;
+    --sans: "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+    --serif: "Noto Serif TC", Georgia, serif;
+    --mono: "IBM Plex Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px 36px; background: var(--bg); color: var(--fg);
+         font: 14px/1.6 var(--sans); }
+  .wrap { max-width: 1280px; margin: 0 auto; }
+
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
+           margin-bottom: 24px; }
+  h1 { font-family: var(--serif); font-size: 28px; font-weight: 600; margin: 0;
+       letter-spacing: -0.01em; }
+  header p { margin: 4px 0 0; font-size: 13px; color: var(--dim); }
+
+  .cols { display: flex; gap: 24px; align-items: flex-start; margin-top: 16px; }
+  aside { width: 396px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px;
+          position: sticky; top: 32px; }
+  main { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+  .card.active { border-left: 3px solid var(--accent); }
+  .cap { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--dim); }
+
+  label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 6px; }
+  input, select { width: 100%; background: var(--card); color: var(--fg);
+                  border: 1px solid var(--field); border-radius: 7px; padding: 9px 10px;
+                  font: 14px var(--sans); }
+  input.mono { font-family: var(--mono); }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+  .check { display: flex; align-items: center; gap: 8px; }
+  .check label { margin: 0; color: var(--fg); font-size: 13px; }
+
+  button, .btn { font: 13px var(--sans); background: transparent; color: var(--dim);
+                 border: 1px solid var(--field); border-radius: 7px; padding: 0 14px;
+                 height: 34px; display: inline-flex; align-items: center;
+                 justify-content: center; vertical-align: middle;
+                 cursor: pointer; text-decoration: none;
+                 white-space: nowrap; flex-shrink: 0; }
+  button:hover, .btn:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff;
+                   font-weight: 700; font-size: 14px; height: 42px; padding: 0 26px; }
+  button.primary:hover { background: var(--accent-hi); color: #fff; }
+  button.icon { width: 34px; padding: 0; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.arm { color: var(--err); border-color: var(--err); font-weight: 500; }
+
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .spread { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .sep { border-top: 1px solid var(--line-soft); padding-top: 14px; margin-top: 14px; }
+
+  .drop { border: 1.5px dashed var(--field); border-radius: 10px; padding: 22px 16px;
+          text-align: center; color: var(--dim); transition: .15s; }
+  .drop.hot { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .drop .links { margin-top: 10px; display: flex; gap: 8px; justify-content: center; }
+
+  .bar { height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--accent); transition: width .5s; }
+  .bar.ok > i { background: var(--ok); }
+  .bar.err > i { background: var(--err); }
+
+  .batches { display: grid; gap: 10px; margin-top: 18px;
+             grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+  .batch .bar { height: 4px; margin-top: 5px; }
+  .batch .lbl { font-size: 11px; color: var(--dim); font-family: var(--mono);
+                display: flex; justify-content: space-between; }
+
+  .pill { font-size: 11px; border-radius: 99px; padding: 2px 10px; border: 1px solid; white-space: nowrap; }
+  .pill.run { color: var(--accent); border-color: #9FB7C9; }
+  .pill.done { color: var(--ok); border-color: #A8C9B8; }
+  .pill.err { color: var(--err); border-color: #D9A69F; }
+  .pill.idle { color: var(--dim); border-color: var(--field); }
+
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 11px 10px; border-bottom: 1px solid var(--line-soft); }
+  td:first-child { padding-left: 0; }
+  td:last-child { padding-right: 0; }
+  tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; color: var(--dim); font-family: var(--mono); font-size: 13px;
+           white-space: nowrap; width: 110px; }
+  td.act { text-align: right; white-space: nowrap; padding-left: 20px; width: 1%; }
+  td.act > * + * { margin-left: 8px; }
+
+  .days { display: flex; align-items: flex-end; gap: 4px; height: 46px; margin-top: 16px; }
+  .days > div { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+  .days i { display: block; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; opacity: .75; }
+  .days i.big { opacity: 1; }
+
+  #toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+           background: var(--fg); color: var(--bg); padding: 11px 20px; border-radius: 8px;
+           font-size: 13.5px; box-shadow: 0 4px 16px rgba(0,0,0,.18); z-index: 99;
+           max-width: 620px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  #toast.show { opacity: 1; }
+  #toast.bad { background: var(--err); color: #fff; }
+
+  .mono { font-family: var(--mono); }
+  .muted { color: var(--dim); font-size: 12px; }
+  .hint { color: var(--dim); font-size: 12px; line-height: 1.5; margin-top: 6px; }
+  .warn { color: #8A6A1F; font-size: 12px; }
+  .err { color: var(--err); font-size: 12px; word-break: break-all; }
+  .hide { display: none !important; }
+
+  details.more > summary { cursor: pointer; font-size: 12px; color: var(--dim); margin-top: 6px; }
+  details.more ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; }
+  details.more li { word-break: break-all; }
+
+  details.history > summary { list-style: none; cursor: pointer; padding: 13px 18px;
+      border: 1px solid var(--line); border-radius: 10px; color: var(--dim); font-size: 13px;
+      display: flex; align-items: center; justify-content: space-between; background: var(--card); }
+  details.history > summary::-webkit-details-marker { display: none; }
+  details.history > summary:hover { border-color: var(--accent); color: var(--accent); }
+  details.history[open] > summary { border-radius: 10px 10px 0 0; border-bottom: none; }
+  details.history .body { border: 1px solid var(--line); border-top: 1px solid var(--line-soft);
+      border-radius: 0 0 10px 10px; background: var(--card); padding: 4px 18px; }
+  details.history svg { transition: transform .2s; }
+  details.history[open] summary svg { transform: rotate(180deg); }
+
+  @media (max-width: 1080px) {
+    body { padding: 20px 16px; }
+    .cols { flex-direction: column; }
+    aside { width: 100%; position: static; }
+  }
+</style>
+</head>
+<body>
+<div id="toast"></div>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>modal&#8209;avif</h1>
+      <p>CPU 批次轉 AVIF　·　送出後可關掉本頁</p>
+    </div>
+    <button type="button" onclick="armConfirm(this, stopApp)"
+            title="停掉 avif-convert 的所有容器（含 HTTP 端點），之後要重新 modal deploy">強制停止整個 App</button>
+  </header>
+
+  <div class="card">
+    <div class="spread" style="margin-bottom:14px">
+      <div class="cap">本月 Modal 用量</div>
+      <div class="row">
+        <span class="muted mono" id="budgetCycle"></span>
+        <button type="button" class="icon" onclick="loadBudget(true)" title="重新讀取（帳單 API 有速率限制，平常快取 10 分鐘）" aria-label="重新讀取帳單">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="spread" style="align-items:flex-end">
+      <div>
+        <div class="mono" id="budgetLeft" style="font-size:34px;font-weight:500;line-height:1">—</div>
+        <div class="muted" id="budgetUsed" style="margin-top:6px">讀取中…</div>
+      </div>
+      <div style="text-align:right">
+        <label for="allowance" style="margin-bottom:4px">每月額度（美元）</label>
+        <input class="mono" id="allowance" type="number" step="1" min="1" style="width:110px;text-align:right" value="30">
+      </div>
+    </div>
+    <div class="bar" style="margin-top:16px"><i id="budgetBar" style="width:0"></i></div>
+    <div id="budgetDays" class="days"></div>
+    <div class="muted" id="budgetApps" style="margin-top:10px"></div>
+  </div>
+
+  <div class="cols">
+    <aside>
+
+      <div class="card">
+        <div class="cap" style="margin-bottom:14px">上傳原圖</div>
+        <div class="drop" id="drop">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          <div style="font-size:13px;margin-top:6px">把資料夾或圖片拖進來</div>
+          <div class="links">
+            <button type="button" onclick="$('pickDir').click()">選資料夾</button>
+            <button type="button" onclick="$('pickFiles').click()">選檔案</button>
+          </div>
+        </div>
+        <input type="file" id="pickDir" class="hide" webkitdirectory multiple>
+        <input type="file" id="pickFiles" class="hide" multiple>
+
+        <div id="staged" class="hide" style="margin-top:14px">
+          <div class="muted" id="stagedInfo"></div>
+          <label for="stagedName" style="margin-top:10px">上傳到 in/</label>
+          <div class="row">
+            <input class="mono" id="stagedName">
+            <button type="button" id="stagedGo" onclick="uploadStaged()">上傳</button>
+            <button type="button" class="icon" onclick="clearStaged()" title="取消" aria-label="取消">✕</button>
+          </div>
+        </div>
+
+        <div style="margin-top:14px">
+          <label for="localPath">或填本機路徑（不複製，直接傳原檔）</label>
+          <div class="row">
+            <input class="mono" id="localPath" style="font-size:12px" placeholder="D:\照片\2026京都">
+            <button type="button" id="localGo" onclick="uploadLocal()">上傳</button>
+          </div>
+        </div>
+        <div id="xfers"></div>
+      </div>
+
+      <div class="card">
+        <div class="cap" style="margin-bottom:14px">送件</div>
+        <div style="margin-bottom:14px">
+          <label for="name">來源（in/ 底下的資料夾）</label>
+          <select id="name"></select>
+        </div>
+
+        <div class="grid2" style="margin-bottom:6px">
+          <div><label for="quality">quality（1–100）</label><input class="mono" id="quality" type="number" min="1" max="100"></div>
+          <div><label for="speed">speed（0–9）</label><input class="mono" id="speed" type="number" min="0" max="9"></div>
+          <div><label for="depth">位元深度</label>
+            <select id="depth"><option>8</option><option>10</option><option>12</option></select></div>
+          <div><label for="chroma">色度取樣</label>
+            <select id="chroma"><option>420</option><option>422</option><option>444</option></select></div>
+        </div>
+        <div class="hint" id="speedHint"></div>
+
+        <div class="row" style="gap:18px;margin:14px 0">
+          <div class="check"><input type="checkbox" id="strip"><label for="strip" title="去掉 EXIF/XMP，保留 ICC">去中繼資料</label></div>
+          <div class="check"><input type="checkbox" id="srgb"><label for="srgb" title="依內嵌 ICC 轉成 sRGB">轉 sRGB</label></div>
+        </div>
+
+        <div class="grid2">
+          <div><label for="tag">tag（可留空）</label><input class="mono" id="tag" placeholder="無"></div>
+          <div><label>輸出到</label><div class="mono muted" id="outPreview" style="padding-top:9px;word-break:break-all">—</div></div>
+        </div>
+        <div class="check" style="margin-top:12px">
+          <input type="checkbox" id="overwrite"><label for="overwrite">整個輸出資料夾刪掉重轉</label>
+        </div>
+
+        <details class="more" style="margin-top:12px">
+          <summary>容器設定</summary>
+          <div class="grid3" style="margin-top:10px">
+            <div><label for="cpu">每容器核心</label><input class="mono" id="cpu" type="number" min="1" max="32"></div>
+            <div><label for="batch">每容器張數</label><input class="mono" id="batch" type="number" min="1"></div>
+            <div><label for="max_containers">最多容器</label><input class="mono" id="max_containers" type="number" min="1"></div>
+          </div>
+          <div class="hint">容器內每個核心同時轉一張。每容器張數越少，被搶佔時損失越小，但冷啟動次數越多。</div>
+        </details>
+
+        <div class="spread sep">
+          <div class="muted" id="submitNote" style="line-height:1.5"></div>
+          <button type="button" class="primary" id="go" onclick="armConfirm(this, submitJob)">送出</button>
+        </div>
+      </div>
+    </aside>
+
+    <main>
+      <div id="active"></div>
+
+      <div class="card">
+        <div class="spread" style="margin-bottom:12px">
+          <div class="cap">成品（out/）</div>
+          <div class="muted mono" id="outTotal"></div>
+        </div>
+        <div id="out"></div>
+      </div>
+
+      <div class="card">
+        <div class="spread" style="margin-bottom:12px">
+          <div class="cap">原圖（in/）</div>
+          <div class="muted mono" id="inTotal"></div>
+        </div>
+        <div id="in"></div>
+      </div>
+
+      <details class="history" id="hist">
+        <summary>
+          <span id="histLabel">歷史</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </summary>
+        <div class="body" id="histBody"></div>
+      </details>
+    </main>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const mib = b => b >= 1073741824 ? (b/1073741824).toFixed(2)+" GiB" : (b/1048576).toFixed(1)+" MiB";
+const dur = s => { s = Math.round(s || 0); return s >= 60 ? `${Math.floor(s/60)}m${String(s%60).padStart(2,"0")}s` : s + "s"; };
+const money = v => "$" + v.toFixed(v < 0.1 ? 4 : 2);
+const TERMINAL = ["done", "error", "cancelled"];
+let EXTS = [];
+
+// ---- 提示與確認 ------------------------------------------------------------
+// 不用 confirm() / alert()：瀏覽器可以永久封鎖一個網域的對話框，
+// 一旦被封鎖，按下去就真的什麼都不會發生，而且沒有任何線索。
+
+let toastTimer = null;
+function toast(msg, bad = false) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.toggle("bad", bad);
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), bad ? 6000 : 3000);
+}
+
+const ICON_CHECK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>';
+const ICON_TRASH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></svg>';
+
+// 兩段式確認：第一次點轉紅，四秒內再點一次才真的執行。
+// 送出也走這個 —— 按一下就開始花錢的按鈕，不該一次誤觸就生效。
+function armConfirm(btn, action) {
+  const restore = () => {
+    clearTimeout(btn._armed);
+    btn._armed = null;
+    btn.innerHTML = btn._html;
+    btn.style.minWidth = "";
+    btn.classList.remove("arm");
+    btn.removeAttribute("data-armed");
+  };
+  if (btn._armed) { restore(); action(); return; }
+  btn._html = btn.innerHTML;
+  btn.style.minWidth = btn.offsetWidth + "px";
+  btn.innerHTML = btn.classList.contains("icon") ? ICON_CHECK : "確定？";
+  btn.classList.add("arm");
+  btn._armed = setTimeout(restore, 4000);
+}
+
+async function send(url, opts, okMsg) {
+  try {
+    const r = await fetch(url, opts);
+    if (!r.ok) {
+      const t = await r.text();
+      let msg = t; try { msg = JSON.parse(t).detail || t; } catch (e) { /* 不是 JSON */ }
+      toast(String(msg).slice(0, 240), true); return null;
+    }
+    if (okMsg) toast(okMsg);
+    return await r.json().catch(() => ({}));
+  } catch (e) {
+    toast("連線失敗：" + e.message + "（server 還在跑嗎？）", true);
+    return null;
+  }
+}
+const post = (url, body, okMsg) => send(url, {method: "POST",
+  headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})}, okMsg);
+
+function paint(el, html) {   // 內容沒變就不動 DOM，避免輪詢重繪造成閃爍與操作中斷
+  if (html !== el._last) { el.innerHTML = html; el._last = html; }
+}
+
+// ---- 上傳：瀏覽器拖曳 ------------------------------------------------------
+// 先整理成「待上傳」讓使用者看一眼張數和名稱，按了才傳。
+
+let staged = null;     // {name, items: [{file, rel}]}
+
+const okExt = name => EXTS.includes(name.slice(name.lastIndexOf(".")).toLowerCase());
+
+function stage(items, name) {
+  const keep = items.filter(x => okExt(x.rel));
+  if (!keep.length) return toast(`沒有可轉的圖片（收 ${EXTS.join(" ")}）`, true);
+  staged = {items: keep};
+  const bytes = keep.reduce((s, x) => s + x.file.size, 0);
+  const dropped = items.length - keep.length;
+  $("stagedInfo").textContent = `${keep.length} 張，${mib(bytes)}` + (dropped ? `（略過 ${dropped} 個非圖片檔）` : "");
+  $("stagedName").value = name || "upload-" + new Date().toLocaleDateString("sv").replaceAll("-", "");
+  $("staged").classList.remove("hide");
+}
+function clearStaged() { staged = null; $("staged").classList.add("hide"); }
+
+// 拖進來的資料夾要自己走訪：dataTransfer.files 只有第一層、而且沒有資料夾
+async function walk(entry, prefix, out) {
+  if (entry.isFile) {
+    const f = await new Promise((ok, bad) => entry.file(ok, bad));
+    out.push({file: f, rel: prefix + f.name});
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader();
+    for (;;) {    // readEntries 一次最多回 100 筆，要讀到空為止
+      const batch = await new Promise((ok, bad) => reader.readEntries(ok, bad));
+      if (!batch.length) break;
+      for (const e of batch) await walk(e, prefix + entry.name + "/", out);
+    }
+  }
+}
+
+const drop = $("drop");
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("hot"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("hot"); }));
+drop.addEventListener("drop", async e => {
+  const entries = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  const out = [];
+  // 只拖一個資料夾：名稱就用它，路徑從它底下算起
+  if (entries.length === 1 && entries[0].isDirectory) {
+    const reader = entries[0].createReader();
+    for (;;) {
+      const batch = await new Promise((ok, bad) => reader.readEntries(ok, bad));
+      if (!batch.length) break;
+      for (const x of batch) await walk(x, "", out);
+    }
+    stage(out, entries[0].name);
+  } else {
+    for (const x of entries) await walk(x, "", out);
+    stage(out);
+  }
+});
+$("pickDir").onchange = e => {
+  const fs = [...e.target.files];
+  if (!fs.length) return;
+  const top = fs[0].webkitRelativePath.split("/")[0];
+  stage(fs.map(f => ({file: f, rel: f.webkitRelativePath.split("/").slice(1).join("/")})), top);
+  e.target.value = "";
+};
+$("pickFiles").onchange = e => {
+  stage([...e.target.files].map(f => ({file: f, rel: f.name})));
+  e.target.value = "";
+};
+
+async function uploadStaged() {
+  if (!staged) return;
+  const name = $("stagedName").value.trim();
+  if (!name) return toast("填一個名稱", true);
+  const items = staged.items;
+  $("stagedGo").disabled = true;
+  const r = await post("/api/upload/start", {name, files: items.length,
+    bytes: items.reduce((s, x) => s + x.file.size, 0)});
+  if (!r) { $("stagedGo").disabled = false; return; }
+  clearStaged();
+  $("stagedGo").disabled = false;
+  loadTransfers();
+
+  // 4 條並行，一張一個 PUT。進度由 server 回報，不靠這個分頁的事件
+  let next = 0, failed = 0;
+  async function worker() {
+    while (next < items.length) {
+      const x = items[next++];
+      const res = await fetch(`/api/upload/${r.uid}?path=${encodeURIComponent(x.rel)}`,
+                              {method: "PUT", body: x.file}).catch(() => null);
+      if (!res || !res.ok) failed++;
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  if (failed) toast(`${failed} 張沒傳上去，其他照常送到 Modal。之後重傳一次會只補缺的`, true);
+  await post(`/api/upload/${r.uid}/finish`);
+  loadTransfers();
+}
+
+async function uploadLocal() {
+  const path = $("localPath").value.trim();
+  if (!path) return toast("填一個本機資料夾或檔案路徑", true);
+  $("localGo").disabled = true;
+  const r = await post("/api/upload/local", {path});
+  if (r) { $("localPath").value = ""; toast(`${r.files} 張 → in/${r.name}`); loadTransfers(); }
+  $("localGo").disabled = false;
+}
+
+// ---- 傳輸進度（上傳與下載） ------------------------------------------------
+// 上傳分兩段：①瀏覽器 → 本機 server（「準備檔案中」），②本機 → Modal。
+// 把①講成「上傳」會讓進度條停在 100% 很久 —— modal-av1 實際踩過的坑。
+const PHASE = {
+  upload: {local: "準備檔案中", plan: "比對雲端已有的檔案", modal: "上傳到 Modal", done: "上傳完成", error: "上傳失敗"},
+  pull:   {prepare: "比對本機已有的檔案", modal: "下載中", done: "下載完成", error: "下載失敗"},
+};
+
+async function loadTransfers() {
+  const ts = await fetch("/api/transfers").then(r => r.json()).catch(() => null);
+  if (!ts) return;
+  const ups = ts.filter(t => t.kind === "upload");
+  paint($("xfers"), ups.map(xferRow).join(""));
+  window._pulls = ts.filter(t => t.kind === "pull");
+  paintPulls();
+  // 每筆傳輸結束時刷新一次檔案清單（不是每次輪詢都刷）
+  const fresh = ts.filter(t => t.phase === "done" && !seenDone.has(t.uid));
+  fresh.forEach(t => seenDone.add(t.uid));
+  if (fresh.length) loadFiles();
+}
+const seenDone = new Set();
+
+function xferRow(t) {
+  const pct = t.phase === "done" ? 100 : t.total ? Math.min(100, t.sent / t.total * 100)
+            : t.files ? t.done / t.files * 100 : 0;
+  const bad = t.phase === "error";
+  const label = (PHASE[t.kind] || {})[t.phase] || t.phase;
+  const count = t.files ? `${t.done}/${t.files} 張` : "";
+  const skip = t.skipped ? `　·　${t.kind === "upload" ? "雲端" : "本機"}已有 ${t.skipped} 張` : "";
+  return `<div style="margin-top:14px">
+    <div class="spread"><span class="muted">${esc(t.name)}　${label}${skip}</span>
+      <span class="muted mono">${count}</span></div>
+    <div class="bar ${bad ? "err" : t.phase === "done" ? "ok" : ""}" style="margin-top:6px"><i style="width:${pct}%"></i></div>
+    ${t.error ? `<div class="err">${esc(t.error)}</div>` : ""}
+  </div>`;
+}
+
+// ---- 送件 ----------------------------------------------------------------
+const FIELDS = ["quality", "speed", "depth", "chroma", "cpu", "batch", "max_containers"];
+const CHECKS = ["strip", "srgb"];
+
+// 速度提示用的是實測量級，不是精確估算：speed 6 每張 12MP 約 1–4 核秒，
+// speed 1 約 1–2 核分鐘（被取消前的量測），差了幾十倍，送出前要看得到。
+function speedHint() {
+  const s = +$("speed").value;
+  $("speedHint").textContent = s <= 2 ? "speed 0–2 很慢：12MP 照片每張約 1–2 核分鐘，1000 張約 $2–3。"
+    : s <= 5 ? "speed 3–5：速度與體積的折衷。"
+    : "speed 6 以上很快：12MP 照片每張只要幾核秒。";
+}
+
+function outPreview() {
+  const n = $("name").value, t = $("tag").value.trim();
+  $("outPreview").textContent = n ? "out/" + n + (t ? "_" + t : "") : "—";
+  const f = (window._files || {}).in || [];
+  const src = f.find(x => x.name === n);
+  $("submitNote").textContent = src ? `${src.files} 張，約 ${Math.ceil(src.files / +$("batch").value)} 個容器` : "";
+}
+["name", "tag", "batch"].forEach(id => $(id).addEventListener("input", outPreview));
+$("name").addEventListener("change", outPreview);
+$("speed").addEventListener("input", speedHint);
+
+async function submitJob() {
+  const body = {name: $("name").value, tag: $("tag").value.trim(), overwrite: $("overwrite").checked};
+  if (!body.name) return toast("先上傳並選一個來源資料夾", true);
+  FIELDS.forEach(k => body[k] = ["chroma"].includes(k) ? $(k).value : +$(k).value);
+  CHECKS.forEach(k => body[k] = $(k).checked);
+  const r = await post("/api/jobs", body, "已送出，可以關掉本頁");
+  if (r) { $("overwrite").checked = false; loadJobs(); }
+}
+
+// ---- 工作 ----------------------------------------------------------------
+const STATE = {queued: ["排隊中", "run"], listing: ["列檔中", "run"], converting: ["轉檔中", "run"],
+               done: ["完成", "done"], error: ["失敗", "err"], cancelled: ["已取消", "idle"]};
+const paramLine = p => p.quality == null ? "" :
+  `q${p.quality} · speed ${p.speed} · ${p.depth}-bit · ${p.chroma}` + (p.strip ? " · strip" : "") + (p.srgb ? " · sRGB" : "");
+
+function batchCells(j) {
+  const bs = j.batches || [];
+  if (bs.length < 2) return "";
+  return `<div class="batches">${bs.map(b => {
+    const n = (b.converted || 0) + (b.skipped || 0) + (b.failed || 0), tot = b.total || 0;
+    const pct = b.state === "done" ? 100 : tot ? n / tot * 100 : 0;
+    const redo = (b.attempt || 1) > 1 && b.state !== "done";
+    const col = b.state === "done" ? "var(--ok)" : redo ? "var(--err)" : "var(--accent)";
+    const txt = b.state === "waiting" ? "—" : tot ? `${n}/${tot}` : "…";
+    return `<div class="batch" title="${redo ? "被搶佔，正在重跑（已轉好的會跳過）" : ""}">
+      <div class="lbl"><span>#${String(b.idx).padStart(2, "0")}</span><span style="color:${col}">${txt}</span></div>
+      <div class="bar"><i style="width:${pct}%;background:${col}"></i></div></div>`;
+  }).join("")}</div>`;
+}
+
+function activeCard(j) {
+  const [text, cls] = STATE[j.state] || [j.state, "idle"];
+  const counts = j.total_files
+    ? `${j.processed}/${j.total_files} 張　·　轉 ${j.converted}　沿用 ${j.skipped}` + (j.failed ? `　<span style="color:var(--err)">失敗 ${j.failed}</span>` : "")
+    : "準備中";
+  return `<div class="card active">
+    <div class="spread" style="align-items:flex-start">
+      <div style="min-width:0">
+        <div class="row">
+          <span style="font-family:var(--serif);font-size:20px;font-weight:600">${esc(j.out_name)}</span>
+          <span class="pill ${cls}">${text}</span>
+          ${j.stale ? '<span class="pill err" title="driver 結束了但狀態沒收尾。取消後重送，已轉好的會沿用">driver 已消失</span>' : ""}
+        </div>
+        <div class="muted mono" style="margin-top:6px">in/${esc(j.name)}　·　${esc(paramLine(j.params))}</div>
+        <div class="muted" style="margin-top:2px">${counts}</div>
+      </div>
+      <div class="row">
+        <span class="mono" style="font-size:30px;font-weight:500;color:var(--accent);line-height:1">${j.pct.toFixed(1)}%</span>
+        <button type="button" onclick="armConfirm(this, () => cancelJob('${j.job_id}'))">取消</button>
+      </div>
+    </div>
+    <div class="bar" style="margin-top:18px"><i style="width:${j.pct}%"></i></div>
+    ${batchCells(j)}
+  </div>`;
+}
+
+function listMore(title, items, fmt) {
+  if (!items.length) return "";
+  return `<details class="more"><summary>${title}</summary><ul>${items.slice(0, 50).map(fmt).join("")}</ul></details>`;
+}
+
+function histRow(j) {
+  const [text, cls] = STATE[j.state] || [j.state, "idle"];
+  const u = j.usage || {};
+  const size = j.bytes_in ? `${mib(j.bytes_in)} → ${mib(j.bytes_out)}（${(j.bytes_out / j.bytes_in * 100).toFixed(0)}%）` : "";
+  const counts = j.total_files ? `轉 ${j.converted}　沿用 ${j.skipped}` + (j.failed ? `　失敗 ${j.failed}` : "") : "";
+  const cost = u.cost ? `${money(u.cost)}　·　${(u.core_seconds / 3600).toFixed(2)} 核時　·　${u.containers} 個容器　·　${dur(u.wall)}`
+             + (u.retries ? `　·　<span style="color:var(--err)">被搶佔重跑 ${u.retries} 次</span>` : "") : "";
+  return `<div class="spread" style="padding:12px 0;border-bottom:1px solid var(--line-soft);align-items:flex-start">
+    <div style="min-width:0">
+      <div class="row"><span style="font-size:14px">${esc(j.out_name)}</span><span class="pill ${cls}">${text}</span></div>
+      <div class="muted mono">${j.job_id}　·　${esc(paramLine(j.params))}</div>
+      <div class="muted">${[counts, size].filter(Boolean).join("　·　")}</div>
+      ${cost ? `<div class="muted mono">${cost}</div>` : ""}
+      ${j.error ? `<div class="err">${esc(j.error)}</div>` : ""}
+      ${listMore(`失敗的 ${j.failures.length} 張`, j.failures, f => `<li><span class="mono">${esc(f.path)}</span><br><span class="err">${esc(f.error)}</span></li>`)}
+      ${listMore(`動態圖只轉了第一格（${j.animated.length} 張）`, j.animated, a => `<li class="mono">${esc(a)}</li>`)}
+    </div>
+    <div class="row">
+      ${j.state === "done" && (j.converted + j.skipped) ? `<button type="button" class="pull" data-name="${esc(j.out_name)}">下載到本機</button>` : ""}
+      <button type="button" onclick="forgetJob('${j.job_id}')" title="只移除這筆紀錄，不動 Volume 上的檔案">移除</button>
+    </div>
+  </div>`;
+}
+
+async function loadJobs() {
+  const list = await fetch("/api/jobs").then(r => r.json());
+  const running = list.filter(j => !TERMINAL.includes(j.state));
+  const past = list.filter(j => TERMINAL.includes(j.state));
+  paint($("active"), running.map(activeCard).join(""));
+  $("histLabel").textContent = past.length ? `歷史（${past.length} 筆已結束）` : "歷史";
+  $("hist").classList.toggle("hide", past.length === 0);
+  if ($("hist").open) paint($("histBody"), past.map(histRow).join(""));
+  // 有工作剛結束就刷新成品清單
+  const ids = running.map(j => j.job_id).join();
+  if (window._running !== undefined && window._running !== ids) loadFiles(true);
+  window._running = ids;
+}
+$("hist").addEventListener("toggle", () => { $("histBody")._last = null; loadJobs(); });
+
+async function cancelJob(id) {
+  if (await post(`/api/jobs/${id}/cancel`, null, "已取消，已轉好的會留著供重送沿用")) loadJobs();
+}
+async function forgetJob(id) {
+  if (await send("/api/jobs/" + id, {method: "DELETE"})) { $("histBody")._last = null; loadJobs(); }
+}
+
+// ---- 檔案 ----------------------------------------------------------------
+async function pullOut(name) {
+  if (await post("/api/pull", {name}, `開始下載 out/${name} 到本機`)) loadTransfers();
+}
+async function openOut(name) { await post("/api/open", {name}); }
+
+function paintPulls() {
+  // 下載進度顯示在成品表格那一列的下面
+  document.querySelectorAll("[data-pull]").forEach(el => {
+    const t = (window._pulls || []).filter(p => p.name === el.dataset.pull).pop();
+    paint(el, t ? xferRow(t) : "");
+  });
+}
+
+function fillSelect(sel, items) {   // 重建下拉時保住使用者的選擇
+  const keep = sel.value;
+  const opts = items.map(x => `<option value="${esc(x.name)}">${esc(x.name)}（${x.files} 張）</option>`).join("")
+               || '<option value="">（先上傳原圖）</option>';
+  if (opts !== sel._last) { sel.innerHTML = opts; sel._last = opts; }
+  if (items.some(x => x.name === keep)) sel.value = keep;
+}
+
+async function loadFiles(fresh) {
+  const f = await fetch("/api/files").then(r => r.json()).catch(() => null);
+  if (!f) return;
+  window._files = f;
+  fillSelect($("name"), f.in);
+  outPreview();
+
+  const total = xs => xs.length ? `${xs.reduce((s, x) => s + x.files, 0)} 張　·　${mib(xs.reduce((s, x) => s + x.bytes, 0))}` : "";
+  $("outTotal").textContent = total(f.out) + (f.stale ? "　·　清單可能過時" : "");
+  $("inTotal").textContent = total(f.in);
+
+  // 資料夾名放 data-* 而不是塞進 onclick 字串：名稱含引號會把字串撐破
+  paint($("out"), f.out.length ? `<table><tbody>${f.out.map(x => `
+    <tr><td><div>${esc(x.name)}</div><div data-pull="${esc(x.name)}"></div></td>
+      <td class="num">${x.files} 張</td><td class="num">${mib(x.bytes)}</td>
+      <td class="act">
+        <button type="button" class="pull" data-name="${esc(x.name)}">下載到本機</button>
+        ${x.local ? `<button type="button" class="open" data-name="${esc(x.name)}">開啟資料夾</button>` : ""}
+        <button type="button" class="icon rm" data-path="${esc(x.path)}" aria-label="刪除 ${esc(x.path)}" title="刪除雲端的 ${esc(x.path)}">${ICON_TRASH}</button>
+      </td></tr>`).join("")}</tbody></table>`
+    : '<p class="muted" style="margin:0">還沒有成品。</p>');
+  paintPulls();
+
+  paint($("in"), f.in.length ? `<table><tbody>${f.in.map(x => `
+    <tr><td>${esc(x.name)}</td><td class="num">${x.files} 張</td><td class="num">${mib(x.bytes)}</td>
+      <td class="act"><button type="button" class="icon rm" data-path="${esc(x.path)}" aria-label="刪除 ${esc(x.path)}" title="刪除雲端的 ${esc(x.path)}">${ICON_TRASH}</button></td></tr>`).join("")}</tbody></table>`
+    : '<p class="muted" style="margin:0">還沒有原圖。</p>');
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.classList.contains("rm")) armConfirm(b, () => rmFolder(b.dataset.path));
+  else if (b.classList.contains("pull")) pullOut(b.dataset.name);
+  else if (b.classList.contains("open")) openOut(b.dataset.name);
+});
+
+async function rmFolder(path) {
+  if (await send("/api/files?path=" + encodeURIComponent(path), {method: "DELETE"}, "已刪除 " + path)) loadFiles();
+}
+
+async function stopApp() {
+  const r = await post("/api/stop-app");
+  if (r) toast(r.ok ? "已停止整個 App，要再用請重新 modal deploy convert.py" : "失敗：" + r.out, !r.ok);
+  loadJobs();
+}
+
+// ---- 預算 ----------------------------------------------------------------
+// 數字全部來自 Modal 的 billing API，不是本機推算的。
+// 唯一存在本機的是「每月額度」—— API 只說用掉多少，不說上限。
+async function loadBudget(refresh) {
+  const b = await fetch("/api/billing" + (refresh === true ? "?refresh=true" : "")).then(r => r.ok ? r.json() : null).catch(() => null);
+  if (!b) { $("budgetUsed").textContent = "讀不到帳單"; return; }
+  const left = b.remaining, pct = Math.min(100, b.metered / b.allowance * 100);
+  const low = left < b.allowance * 0.15;
+  $("budgetLeft").textContent = "$" + left.toFixed(2);
+  $("budgetLeft").style.color = low ? "var(--err)" : "var(--accent)";
+  $("budgetUsed").textContent = `已用 $${b.metered.toFixed(2)} / $${b.allowance.toFixed(0)}　·　${pct.toFixed(0)}%`;
+  $("budgetCycle").textContent = `${b.cycle_start} ～ ${b.cycle_end}` + (b.stale ? "　·　數字可能過時" : "");
+  $("budgetCycle").style.color = b.stale ? "var(--err)" : "";
+  $("budgetBar").style.width = pct + "%";
+  $("budgetBar").style.background = low ? "var(--err)" : "var(--accent)";
+  if (document.activeElement !== $("allowance")) $("allowance").value = b.allowance;
+
+  // 週期內每一天都畫（沒花錢的補 0），否則只有兩天資料時會變成兩大塊
+  const byDate = Object.fromEntries(b.daily.map(d => [d.date, d.cost]));
+  const days = [];
+  for (let t = new Date(b.cycle_start + "T00:00"), today = new Date(); t <= today && days.length < 40; t.setDate(t.getDate() + 1)) {
+    const key = t.toLocaleDateString("sv");
+    days.push({date: key, cost: byDate[key] || 0});
+  }
+  const max = Math.max(...days.map(d => d.cost), 0.01);
+  $("budgetDays").innerHTML = days.map(d => `<div title="${d.date}　$${d.cost.toFixed(3)}">
+    <i class="${d.cost === max ? "big" : ""}" style="height:${Math.max(d.cost / max * 100, 1)}%"></i></div>`).join("");
+  $("budgetApps").textContent = b.by_app.map(a => `${a.name} $${a.cost.toFixed(a.cost < 0.1 ? 3 : 2)}`).join("　·　");
+}
+$("allowance").onchange = async e => { await post("/api/billing/allowance", {allowance: +e.target.value}); loadBudget(); };
+
+// ---- 啟動 ----------------------------------------------------------------
+function poll(fn, gap) {   // 每輪等上一輪結束才排下一輪，慢的時候不會堆疊
+  (async function loop() {
+    try { await fn(); } catch (e) { /* 網路瞬斷就下一輪再說 */ }
+    setTimeout(loop, gap);
+  })();
+}
+
+(async () => {
+  const d = await fetch("/api/defaults").then(r => r.json());
+  EXTS = d.exts;
+  FIELDS.forEach(k => $(k).value = d.defaults[k]);
+  CHECKS.forEach(k => $(k).checked = !!d.defaults[k]);
+  speedHint();
+  poll(loadJobs, 3000);
+  poll(loadTransfers, 1500);   // 純本機記憶體讀取，不花錢
+  poll(loadFiles, 15000);      // server 端也快取 15 秒：VolumeListFiles 有速率限制
+  poll(loadBudget, 300000);    // billing report 有速率限制，server 端快取 10 分鐘
+})();
+</script>
+</body>
+</html>

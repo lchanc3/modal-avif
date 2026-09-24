@@ -1,0 +1,10 @@
+# pip install -r requirements.txt
+#
+# 實測版本：modal 1.5.5 / fastapi 0.141.1 / uvicorn 0.53.0（2026-09-25）
+
+modal>=1.5.5        # 需要 @app.function 的 nonpreemptible 參數，以及 Dict.items()
+fastapi>=0.110      # web/server.py
+uvicorn>=0.27       # web/server.py 的 ASGI server
+
+# 不需要 python-multipart：瀏覽器上傳是一張一個 PUT 送原始 body，沒有走 multipart。
+# ImageMagick 只在容器裡，本機不需要安裝任何影像工具。
