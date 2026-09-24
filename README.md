@@ -102,3 +102,12 @@ modal container list
 | 某些檔案失敗 | 網頁歷史紀錄或 `python avif.py status <job id>` 會列出每張的錯誤 |
 | 改了 `jobspec.py` 但網頁行為沒變 | server 啟動時就載入了，要重啟 `start-web.bat` |
 | Windows 主控台中文亂碼 | `chcp 65001`，或設定 `PYTHONIOENCODING=utf-8` |
+
+## 授權
+
+[GNU General Public License v3.0](LICENSE)　Copyright (C) 2026 shiho
+
+可自由使用、修改、散布，但**散布修改後的版本時必須同樣以 GPL-3.0 公開原始碼**。
+
+容器裡的 ImageMagick、libheif、libaom 是建置 image 時從 Debian 套件庫安裝的
+（見 `convert.py` 的 `image`），本 repo 不散布它們的二進位檔。
