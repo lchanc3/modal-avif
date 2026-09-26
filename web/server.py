@@ -77,7 +77,8 @@ def index():
 @app.get("/api/defaults")
 def defaults():
     """表單的預設值從 jobspec 來，網頁不自己寫一份。"""
-    return {"defaults": jobspec.DEFAULTS, "exts": sorted(convert.EXTS)}
+    return {"defaults": jobspec.DEFAULTS, "presets": jobspec.PRESETS,
+            "default_preset": jobspec.DEFAULT_PRESET, "exts": sorted(convert.EXTS)}
 
 
 def _name(raw) -> str:

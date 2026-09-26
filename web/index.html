@@ -229,6 +229,11 @@
           <label for="name">來源（in/ 底下的資料夾）</label>
           <select id="name"></select>
         </div>
+        <div style="margin-bottom:14px">
+          <label for="preset">預設組合</label>
+          <select id="preset"></select>
+          <div class="hint" id="presetHint"></div>
+        </div>
 
         <div class="grid2" style="margin-bottom:6px">
           <div><label for="quality">quality（1–100）</label><input class="mono" id="quality" type="number" min="1" max="100"></div>
@@ -237,6 +242,7 @@
             <select id="depth"><option>8</option><option>10</option><option>12</option></select></div>
           <div><label for="chroma">色度取樣</label>
             <select id="chroma"><option>420</option><option>422</option><option>444</option></select></div>
+          <div><label for="resize">縮放（%，100 = 原尺寸）</label><input class="mono" id="resize" type="number" min="1" max="100"></div>
         </div>
         <div class="hint" id="speedHint"></div>
 
@@ -255,12 +261,13 @@
 
         <details class="more" style="margin-top:12px">
           <summary>容器設定</summary>
-          <div class="grid3" style="margin-top:10px">
+          <div class="grid2" style="margin-top:10px">
             <div><label for="cpu">每容器核心</label><input class="mono" id="cpu" type="number" min="1" max="32"></div>
             <div><label for="batch">每容器張數</label><input class="mono" id="batch" type="number" min="1"></div>
             <div><label for="max_containers">最多容器</label><input class="mono" id="max_containers" type="number" min="1"></div>
+            <div><label for="mem_per_image">每張記憶體（MiB）</label><input class="mono" id="mem_per_image" type="number" min="512" step="512"></div>
           </div>
-          <div class="hint">容器內每個核心同時轉一張。每容器張數越少，被搶佔時損失越小，但冷啟動次數越多。</div>
+          <div class="hint">容器內每個核心同時轉一張，容器記憶體 = 核心數 × 每張記憶體。每容器張數越少，被搶佔時損失越小，但冷啟動次數越多。</div>
         </details>
 
         <div class="spread sep">
@@ -509,8 +516,37 @@ function xferRow(t) {
 }
 
 // ---- 送件 ----------------------------------------------------------------
-const FIELDS = ["quality", "speed", "depth", "chroma", "cpu", "batch", "max_containers"];
+const FIELDS = ["quality", "speed", "depth", "chroma", "resize", "cpu", "batch", "max_containers", "mem_per_image"];
 const CHECKS = ["strip", "srgb"];
+let DEFAULTS = {}, PRESETS = {};
+
+// 預設組合只是把欄位填好；送出的是欄位上的值。手動改過任何一格，下拉選單就顯示「自訂」，
+// 改回和某組一模一樣又會自動對回去。
+const presetValues = k => Object.assign({}, DEFAULTS, PRESETS[k].params);
+const formValue = k => $(k).type === "checkbox" ? $(k).checked : $(k).value;
+const same = (v, k) => $(k).type === "checkbox" ? !!v === $(k).checked : String(v) === $(k).value;
+
+function applyPreset(k) {
+  const v = presetValues(k);
+  FIELDS.forEach(f => $(f).value = v[f]);
+  CHECKS.forEach(f => $(f).checked = !!v[f]);
+  speedHint(); outPreview(); syncPreset();
+}
+
+function syncPreset() {
+  const k = Object.keys(PRESETS).find(k => {
+    const v = presetValues(k);
+    return FIELDS.concat(CHECKS).every(f => same(v[f], f));
+  }) || "";
+  $("preset").value = k;
+  if (!k) return $("presetHint").textContent = "自訂參數。";
+  const box = ["cpu", "batch", "max_containers", "mem_per_image"].some(f => String(DEFAULTS[f]) !== String(presetValues(k)[f]));
+  $("presetHint").textContent = PRESETS[k].note + (box ? "（容器設定也跟著改了）" : "");
+  try { localStorage.setItem("avif.preset", k); } catch (e) {}
+}
+$("preset").addEventListener("change", e => e.target.value && applyPreset(e.target.value));
+FIELDS.concat(CHECKS).forEach(f => $(f).addEventListener("input", syncPreset));
+FIELDS.concat(CHECKS).forEach(f => $(f).addEventListener("change", syncPreset));
 
 // 速度提示用的是實測量級，不是精確估算：speed 6 每張 12MP 約 1–4 核秒，
 // speed 1 約 1–2 核分鐘（被取消前的量測），差了幾十倍，送出前要看得到。
@@ -533,7 +569,8 @@ $("name").addEventListener("change", outPreview);
 $("speed").addEventListener("input", speedHint);
 
 async function submitJob() {
-  const body = {name: $("name").value, tag: $("tag").value.trim(), overwrite: $("overwrite").checked};
+  const body = {name: $("name").value, tag: $("tag").value.trim(), overwrite: $("overwrite").checked,
+                preset: $("preset").value || undefined};
   if (!body.name) return toast("先上傳並選一個來源資料夾", true);
   FIELDS.forEach(k => body[k] = ["chroma"].includes(k) ? $(k).value : +$(k).value);
   CHECKS.forEach(k => body[k] = $(k).checked);
@@ -545,7 +582,8 @@ async function submitJob() {
 const STATE = {queued: ["排隊中", "run"], listing: ["列檔中", "run"], converting: ["轉檔中", "run"],
                done: ["完成", "done"], error: ["失敗", "err"], cancelled: ["已取消", "idle"]};
 const paramLine = p => p.quality == null ? "" :
-  `q${p.quality} · speed ${p.speed} · ${p.depth}-bit · ${p.chroma}` + (p.strip ? " · strip" : "") + (p.srgb ? " · sRGB" : "");
+  `q${p.quality} · speed ${p.speed} · ${p.depth}-bit · ${p.chroma}` + (p.resize < 100 ? ` · 縮成 ${p.resize}%` : "")
+  + (p.strip ? " · strip" : "") + (p.srgb ? " · sRGB" : "");
 
 function batchCells(j) {
   const bs = j.batches || [];
@@ -750,9 +788,13 @@ function poll(fn, gap) {   // 每輪等上一輪結束才排下一輪，慢的�
 (async () => {
   const d = await fetch("/api/defaults").then(r => r.json());
   EXTS = d.exts;
-  FIELDS.forEach(k => $(k).value = d.defaults[k]);
-  CHECKS.forEach(k => $(k).checked = !!d.defaults[k]);
-  speedHint();
+  DEFAULTS = d.defaults;
+  PRESETS = d.presets;
+  $("preset").innerHTML = Object.entries(PRESETS).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join("")
+    + `<option value="" disabled>自訂</option>`;
+  let last = null;
+  try { last = localStorage.getItem("avif.preset"); } catch (e) {}
+  applyPreset(PRESETS[last] ? last : d.default_preset);
   poll(loadJobs, 3000);
   poll(loadTransfers, 1500);   // 純本機記憶體讀取，不花錢
   poll(loadFiles, 15000);      // server 端也快取 15 秒：VolumeListFiles 有速率限制

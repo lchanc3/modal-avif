@@ -54,7 +54,9 @@ with image.imports():
 
 HOUR = 3600
 SRGB_ICC = "/usr/share/color/icc/sRGB.icc"
-FILE_TIMEOUT = 15 * 60      # 單張上限；卡住的檔案記成失敗，不拖垮整批
+FILE_TIMEOUT = 60 * 60      # 單張上限；卡住的檔案記成失敗，不拖垮整批。原本 15 分鐘，
+                            # 4× 放大的照片一張約 1.8 億像素，speed 4 約 2 核分鐘，但使用者
+                            # 改 speed 1 就會是好幾倍，15 分鐘不夠
 HTTP_MAX = 64 * 2 ** 20     # HTTP 端點自己設的上限；Modal 本身的 body 上限要實測
 
 # 批次模式收的副檔名。.avif 刻意不收：已經是 AVIF 的再壓一次只會掉畫質。
@@ -85,6 +87,7 @@ ENCODE_DEFAULTS = {
                         # （2026-09-25，5 張插畫 PNG，q90 speed 1）。照片用 420 就夠
     "strip": False,     # True：去掉 EXIF/XMP 等中繼資料，但保留 ICC
     "srgb": False,      # True：依內嵌 ICC 轉成 sRGB；False：原樣保留 ICC
+    "resize": 100,      # 縮放百分比，100 = 原尺寸。只縮不放：給 4× 放大過的圖縮回 2× 用
 }
 
 
@@ -97,6 +100,7 @@ def clean_params(p: dict) -> dict:
     q["chroma"] = str(q["chroma"])
     q["strip"] = bool(q["strip"])
     q["srgb"] = bool(q["srgb"])
+    q["resize"] = int(q["resize"])
     if not 1 <= q["quality"] <= 100:
         raise ValueError("quality 要在 1–100")
     if not 0 <= q["speed"] <= 9:
@@ -105,6 +109,8 @@ def clean_params(p: dict) -> dict:
         raise ValueError("depth 只能是 8、10、12")
     if q["chroma"] not in ("420", "422", "444"):
         raise ValueError("chroma 只能是 420、422、444")
+    if not 1 <= q["resize"] <= 100:
+        raise ValueError("resize 要在 1–100（%），只能縮不能放")
     return q
 
 
@@ -164,6 +170,9 @@ def magick_cmd(coder: str, src: str, dst: str, q: dict, threads: int, mem_mib: i
            "-limit", "map", "{}MiB".format(max(128, mem_mib)),
            "{}:{}[0]".format(coder, src),
            "-auto-orient"]
+    if q["resize"] < 100:
+        # 縮小時 IM 預設用 Lanczos，會把放大模型畫出來的假紋理一起收掉
+        cmd += ["-resize", "{}%".format(q["resize"])]
     if q["srgb"]:
         cmd += ["-profile", SRGB_ICC]
     if q["strip"]:
@@ -359,6 +368,8 @@ def check_manifest(out_root: str, q: dict, overwrite: bool) -> None:
     elif os.path.exists(man):
         with open(man, encoding="utf-8") as f:
             old = json.load(f)
+        # 舊 manifest 沒有後來才加的欄位（例如 resize），當時的行為就是預設值
+        old = dict(ENCODE_DEFAULTS, **old)
         if old != q:
             diff = "、".join("{} {}→{}".format(k, old.get(k), q[k]) for k in q if old.get(k) != q[k])
             raise ValueError("{} 已經用別的參數轉過（{}）。換個 tag，或加 overwrite 整個重轉".format(
@@ -456,7 +467,8 @@ def run_job(job_id: str, name: str, p: dict) -> dict:
 @modal.fastapi_endpoint(method="POST", requires_proxy_auth=True)
 async def http(request: Request, quality: int | None = None, speed: int | None = None,
                depth: int | None = None, chroma: str | None = None,
-               strip: bool | None = None, srgb: bool | None = None):
+               strip: bool | None = None, srgb: bool | None = None,
+               resize: int | None = None):
     """POST 原始圖片 bytes，回傳 AVIF。給本機以外的地方用。
 
     需要 proxy auth：請求要帶 Modal-Key / Modal-Secret 標頭（在 Modal 的
@@ -465,7 +477,8 @@ async def http(request: Request, quality: int | None = None, speed: int | None =
     """
     try:
         q = clean_params({"quality": quality, "speed": speed, "depth": depth,
-                          "chroma": chroma, "strip": strip, "srgb": srgb})
+                          "chroma": chroma, "strip": strip, "srgb": srgb,
+                          "resize": resize})
     except ValueError as e:
         raise HTTPException(400, str(e))
     if int(request.headers.get("content-length") or 0) > HTTP_MAX:

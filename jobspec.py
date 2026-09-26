@@ -27,8 +27,41 @@ DEFAULTS = dict(convert.ENCODE_DEFAULTS,
                                     # 1–2 核分鐘，40 張 ÷ 4 核 ≈ 一個容器 15 分鐘：
                                     # 冷啟動攤得掉，被搶佔也只賠一小批
                 max_containers=20,  # 同時最多幾個容器，免得一大批圖一口氣開上百個
+                mem_per_image=2048, # MiB。容器記憶體 = 核心數 × 這個值，因為每核同時轉一張
                 tag="",
                 overwrite=False)
+
+# 預設組合：蓋在 DEFAULTS 上面，使用者另外給的參數再蓋在最上面。
+# 網頁的下拉選單和 CLI 的 --preset 都讀這裡。
+#
+# 真人照片兩組用 7 張 4× 放大的人像實測過（2026-09-26，數據見 NOTES.md）：
+# - quality 取「皮膚毛孔還在」的最低值。4× 的 q65、2× 的 q70 在 1:1 下皮膚已經
+#   變塑膠感；4× q75、2× q80 保留大部分紋理，再往上檔案大很多、看不太出差別。
+# - 照片用 420：色度細節本來就少，444 只多佔空間。
+# - 10-bit：只比 8-bit 大約 1%，但 8-bit 在暗部漸層（深色布料）會出現一格一格的階梯。
+# - 圖大（16384 長邊，約 1.8 億像素）：speed 4 一張約 2 核分鐘，一張不到 $0.01；
+#   每張給 8 GiB 沒被 OOM 過，但上限在哪還沒量。
+PRESETS = {
+    "anime": {
+        "label": "插畫／動畫",
+        "note": "線條邊緣靠 444 才不會糊，q90 幾乎無損。",
+        "params": {},
+    },
+    "photo-2x": {
+        "label": "真人照片：4× 縮回 2×",
+        "note": "長寬各縮一半，Lanczos 會順便收掉放大模型的假紋理。"
+                "實測約是原本 4× JPEG q95 的 5–6%，到處都能開。",
+        "params": dict(resize=50, quality=80, speed=3, depth=10, chroma="420",
+                       mem_per_image=4096),     # 讀檔時還是整張原尺寸解碼
+    },
+    "photo-4x": {
+        "label": "真人照片：保留 4×",
+        "note": "原尺寸，實測約是原本 4× JPEG q95 的 20%。上億像素的 AVIF 有些看圖軟體開得很慢。",
+        "params": dict(quality=75, speed=4, depth=10, chroma="420",
+                       mem_per_image=8192, batch=20),   # 一張約 2 核分鐘，20 張 ≈ 一個容器 10 分鐘
+    },
+}
+DEFAULT_PRESET = "anime"
 
 TERMINAL = ("done", "error", "cancelled")
 
@@ -49,14 +82,22 @@ def check_name(name: str) -> str:
     return name
 
 
-def build(name: str, **over) -> dict:
-    """把使用者給的參數補上預設值，並算出輸出資料夾名。"""
+def build(name: str, preset: str = None, **over) -> dict:
+    """預設值 → 預設組合 → 使用者給的參數，依序蓋上去，並算出輸出資料夾名。"""
+    preset = preset or DEFAULT_PRESET
+    if preset not in PRESETS:
+        raise ValueError("沒有 {} 這個預設組合（有 {}）".format(preset, "、".join(PRESETS)))
     p = dict(DEFAULTS)
+    p.update(PRESETS[preset]["params"])
     p.update({k: v for k, v in over.items() if v is not None and k in DEFAULTS})
     p.update(convert.clean_params(p))
+    p["preset"] = preset
 
     p["cpu"] = int(p["cpu"])
-    p["mem"] = p["cpu"] * 2048      # 大圖的 pixel cache 加上 aom 本身，每張抓 2 GiB
+    p["mem_per_image"] = int(p["mem_per_image"])
+    if p["mem_per_image"] < 512:
+        raise ValueError("每張記憶體至少 512 MiB")
+    p["mem"] = p["cpu"] * p["mem_per_image"]    # 大圖的 pixel cache 加上 aom 本身
     p["batch"] = max(1, int(p["batch"]))
     p["max_containers"] = int(p["max_containers"] or 0)
     p["overwrite"] = bool(p["overwrite"])

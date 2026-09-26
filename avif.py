@@ -88,14 +88,17 @@ def cmd_upload(local: str, name: str = None) -> str:
 def cmd_submit(name: str, args) -> dict:
     over = {k: getattr(args, k, None) for k in jobspec.DEFAULTS}
     try:
-        p = jobspec.build(name, **over)
+        p = jobspec.build(name, preset=args.preset, **over)
     except ValueError as e:
         sys.exit(str(e))
     r = jobspec.submit(jobspec.check_name(name), p)
     print("已送出：in/{} → out/{}".format(name, r["out_name"]))
-    print("參數：  quality {quality}　speed {speed}　depth {depth}　chroma {chroma}"
-          "{s}{c}　每容器 {cpu} 核 / 最多 {batch} 張".format(
-              s="　strip" if p["strip"] else "", c="　轉 sRGB" if p["srgb"] else "", **p))
+    print("參數：  [{label}]　quality {quality}　speed {speed}　depth {depth}　chroma {chroma}"
+          "{z}{s}{c}　每容器 {cpu} 核 / {gib:g} GiB / 最多 {batch} 張".format(
+              label=jobspec.PRESETS[p["preset"]]["label"],
+              z="　縮成 {}%".format(p["resize"]) if p["resize"] < 100 else "",
+              s="　strip" if p["strip"] else "", c="　轉 sRGB" if p["srgb"] else "",
+              gib=p["mem"] / 1024, **p))
     print("job id：{}".format(r["job_id"]))
     return r
 
@@ -254,13 +257,17 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def enc_opts(sp):
-        g = sp.add_argument_group("編碼參數（沒給就用預設）")
+        g = sp.add_argument_group("編碼參數（沒給就用 --preset 的值）")
+        g.add_argument("--preset", choices=list(jobspec.PRESETS),
+                       help="預設組合，預設 {}。".format(jobspec.DEFAULT_PRESET) + "　".join(
+                           "{}：{}".format(k, v["label"]) for k, v in jobspec.PRESETS.items()))
         g.add_argument("-q", "--quality", type=int,
                        help="1–100，預設 {}".format(jobspec.DEFAULTS["quality"]))
         g.add_argument("--speed", type=int,
                        help="0–9，越小越慢越好，預設 {}".format(jobspec.DEFAULTS["speed"]))
         g.add_argument("--depth", type=int, choices=(8, 10, 12), help="位元深度，預設 8")
         g.add_argument("--chroma", choices=("420", "422", "444"), help="色度取樣，預設 {}".format(jobspec.DEFAULTS["chroma"]))
+        g.add_argument("--resize", type=int, help="縮放百分比 1–100，例如 50 = 長寬各一半，預設 100")
         g.add_argument("--strip", action="store_true", default=None,
                        help="去掉 EXIF/XMP 等中繼資料（ICC 保留）")
         g.add_argument("--srgb", action="store_true", default=None,
@@ -273,6 +280,9 @@ def main():
         g.add_argument("--batch", type=int, help="每個容器最多幾張，預設 {}".format(jobspec.DEFAULTS["batch"]))
         g.add_argument("--max-containers", type=int, dest="max_containers",
                        help="同時最多幾個容器，預設 {}".format(jobspec.DEFAULTS["max_containers"]))
+        g.add_argument("--mem-per-image", type=int, dest="mem_per_image",
+                       help="每張圖分到的記憶體（MiB），容器記憶體 = 核心數 × 這個值，預設 {}".format(
+                           jobspec.DEFAULTS["mem_per_image"]))
 
     sp = sub.add_parser("run", help="上傳 → 送件 → 等 → 下載")
     sp.add_argument("local", help="本機資料夾（或單一檔案）")
